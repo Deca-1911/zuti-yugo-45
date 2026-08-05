@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#4a9df0">
+<title>Žuti Yugo 45 — Mala Avantura</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#4a9df0; touch-action:none; overscroll-behavior:none;
+    font-family:system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #c { position:fixed; inset:0; width:100%; height:100%; display:block; }
+
+  /* HUD */
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:5; }
+  #starCount { position:absolute; top:max(10px, env(safe-area-inset-top)); left:max(14px, env(safe-area-inset-left));
+    font-size:min(9vh, 44px); font-weight:800; color:#fff; text-shadow:0 3px 8px rgba(0,0,0,.45); }
+  #missionIcon { position:absolute; top:max(10px, env(safe-area-inset-top)); right:max(14px, env(safe-area-inset-right));
+    font-size:min(11vh, 56px); background:rgba(255,255,255,.35); border:3px solid rgba(255,255,255,.7);
+    border-radius:22px; padding:4px 14px; line-height:1.25; box-shadow:0 4px 14px rgba(0,0,0,.25); }
+  #btnReset { position:fixed; top:max(10px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+    font-size:min(7vh, 36px); background:rgba(255,255,255,.35); border:3px solid rgba(255,255,255,.7);
+    border-radius:50%; width:min(13vh,66px); height:min(13vh,66px); z-index:6; touch-action:none; }
+
+  /* Touch controls */
+  .btn { position:fixed; z-index:6; display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,.30); border:3px solid rgba(255,255,255,.65); border-radius:50%;
+    font-weight:900; color:#fff; text-shadow:0 2px 6px rgba(0,0,0,.4); touch-action:none;
+    box-shadow:0 4px 14px rgba(0,0,0,.2); }
+  .btn.pressed { background:rgba(255,255,255,.65); transform:scale(.94); }
+  #btnL, #btnR { width:min(24vh,120px); height:min(24vh,120px); font-size:min(11vh,54px);
+    bottom:max(16px, env(safe-area-inset-bottom)); }
+  #btnL { left:max(16px, env(safe-area-inset-left)); }
+  #btnR { left:calc(max(16px, env(safe-area-inset-left)) + min(26vh,132px)); }
+  #btnGas { width:min(26vh,130px); height:min(26vh,130px); font-size:min(7vh,34px);
+    right:max(16px, env(safe-area-inset-right)); bottom:max(16px, env(safe-area-inset-bottom));
+    background:rgba(80,220,100,.45); border-color:rgba(160,255,170,.8); }
+  #btnBrake { width:min(17vh,86px); height:min(17vh,86px); font-size:min(8vh,40px);
+    right:calc(max(16px, env(safe-area-inset-right)) + min(28vh,142px)); bottom:max(16px, env(safe-area-inset-bottom));
+    background:rgba(235,80,70,.45); border-color:rgba(255,170,160,.8); }
+  #btnHorn { width:min(15vh,78px); height:min(15vh,78px); font-size:min(8vh,40px);
+    right:calc(max(16px, env(safe-area-inset-right)) + min(28vh,142px));
+    bottom:calc(max(16px, env(safe-area-inset-bottom)) + min(19vh,96px)); }
+
+  /* Mission splash */
+  #splash { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; z-index:8; font-size:min(40vh,200px); opacity:0; }
+  #splash.show { animation:pop 1.6s ease-out; }
+  @keyframes pop { 0%{opacity:0; transform:scale(.2);} 25%{opacity:1; transform:scale(1.15);}
+    45%{transform:scale(1);} 80%{opacity:1;} 100%{opacity:0; transform:scale(1.1);} }
+
+  /* Start screen */
+  #start { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:3vh; background:linear-gradient(#4a9df0, #cfe8ff 70%, #7ec850); }
+  #start h1 { font-size:min(13vh,72px); color:#ffd400; -webkit-text-stroke:2px #7a5a00;
+    text-shadow:0 5px 0 #b08900, 0 10px 24px rgba(0,0,0,.35); letter-spacing:2px; text-align:center; }
+  #start .sub { font-size:min(6vh,30px); color:#255; font-weight:700; }
+  #start .car { font-size:min(16vh,90px); }
+  #btnPlay { font-size:min(10vh,52px); font-weight:900; color:#fff; background:#2fae4a;
+    border:5px solid #fff; border-radius:60px; padding:2vh 7vw; box-shadow:0 8px 24px rgba(0,0,0,.35);
+    touch-action:none; }
+  #btnPlay:active { transform:scale(.95); }
+
+  /* BRAVO screen */
+  #bravo { position:fixed; inset:0; z-index:9; display:none; flex-direction:column; align-items:center;
+    justify-content:center; gap:2vh; background:rgba(30,60,120,.75); }
+  #bravo.show { display:flex; }
+  #bravo .big { font-size:min(16vh,90px); color:#ffd400; font-weight:900; text-shadow:0 6px 18px rgba(0,0,0,.5); }
+  #bravo .stars { font-size:min(10vh,56px); }
+  #btnGo { font-size:min(9vh,48px); background:#2fae4a; color:#fff; border:5px solid #fff;
+    border-radius:50%; width:min(22vh,110px); height:min(22vh,110px); touch-action:none; }
+
+  /* Rotate hint (portrait) */
+  #rotate { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center;
+    background:#4a9df0; font-size:min(30vw,120px); }
+  @media (orientation:portrait) { #rotate { display:flex; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="starCount">⭐ 0</div>
+  <div id="missionIcon">🌉</div>
+</div>
+<button id="btnReset">🔄</button>
+
+<div class="btn" id="btnL">◀</div>
+<div class="btn" id="btnR">▶</div>
+<div class="btn" id="btnHorn">🎺</div>
+<div class="btn" id="btnBrake">🛑</div>
+<div class="btn" id="btnGas">GAS</div>
+
+<div id="splash"></div>
+
+<div id="bravo">
+  <div class="big">BRAVO! 🏆</div>
+  <div class="stars">⭐⭐⭐⭐⭐</div>
+  <button id="btnGo">▶</button>
+</div>
+
+<div id="start">
+  <div class="car">🚕</div>
+  <h1>ŽUTI YUGO 45</h1>
+  <div class="sub">Mala Avantura</div>
+  <button id="btnPlay">▶ VOZI!</button>
+</div>
+
+<div id="rotate">📱🔄</div>
+
+<script type="module" src="game.js"></script>
+</body>
+</html>
