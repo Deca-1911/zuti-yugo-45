@@ -824,6 +824,135 @@ function updatePauk(dt) {
   pauk.arm.rotation.y = angLerp(pauk.arm.rotation.y, Math.atan2(adx, adz) - pauk.truck.rotation.y, Math.min(1, dt * 3));
 }
 
+// ---------------------------------------------------------------- ptice
+// lete nebom, slijeću na cestu i kljucaju; kad se Yugo približi — prhnu i odlete
+const birds = [];
+let chirpCd = 0;
+const BIRD_LAND_SPOTS = [
+  [0, 300], [0, 220], [0, 120], [0, -120], [0, -200], [0, -320],
+  [60, 150], [-60, 150], [60, 250], [-60, 250], [-150, 150], [250, 168],
+  [120, -250], [-120, -250], [200, -250], [-260, -250]
+];
+{
+  const bodyGeo = new THREE.SphereGeometry(0.28, 6, 5);
+  const headGeo = new THREE.SphereGeometry(0.15, 6, 5);
+  const beakGeo = new THREE.ConeGeometry(0.06, 0.2, 5);
+  const tailGeo = new THREE.BoxGeometry(0.26, 0.04, 0.34);
+  const wingGeoL = new THREE.BoxGeometry(0.72, 0.04, 0.32).translate(-0.38, 0, 0);
+  const wingGeoR = new THREE.BoxGeometry(0.72, 0.04, 0.32).translate(0.38, 0, 0);
+  const cols = [0x555a60, 0xf4f6f8, 0x8a5a2b, 0x3b6ea5];
+  for (let i = 0; i < 12; i++) {
+    const c = cols[i % cols.length];
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(bodyGeo, mat(c));
+    body.scale.set(1, 0.85, 1.5);
+    g.add(body);
+    const head = new THREE.Mesh(headGeo, mat(c));
+    head.position.set(0, 0.2, 0.36);
+    g.add(head);
+    const beak = new THREE.Mesh(beakGeo, mat(0xffaa00));
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, 0.18, 0.56);
+    g.add(beak);
+    const tail = new THREE.Mesh(tailGeo, mat(c));
+    tail.position.set(0, 0.06, -0.5);
+    tail.rotation.x = -0.25;
+    g.add(tail);
+    const wingL = new THREE.Mesh(wingGeoL, mat(c));
+    wingL.position.set(-0.12, 0.1, 0);
+    g.add(wingL);
+    const wingR = new THREE.Mesh(wingGeoR, mat(c));
+    wingR.position.set(0.12, 0.1, 0);
+    g.add(wingR);
+    scene.add(g);
+    const b = {
+      g, wingL, wingR,
+      px: -400 + Math.random() * 800, pz: -400 + Math.random() * 800,
+      alt: 10 + Math.random() * 14, talt: 12,
+      heading: Math.random() * Math.PI * 2, speed: 8,
+      state: 'fly', t: 4 + Math.random() * 12,
+      tx: 0, tz: 0, flap: Math.random() * 6, phase: i * 1.7
+    };
+    pickSkyTarget(b);
+    birds.push(b);
+  }
+}
+function pickSkyTarget(b) {
+  b.tx = Math.max(-420, Math.min(420, b.px + Math.random() * 200 - 100));
+  b.tz = Math.max(-420, Math.min(420, b.pz + Math.random() * 200 - 100));
+  b.talt = 9 + Math.random() * 16;
+}
+function birdTakeoff(b, scared) {
+  if (b.state === 'takeoff' || b.state === 'fly') return;
+  b.state = 'takeoff';
+  pickSkyTarget(b);
+  if (scared) {
+    // odleti od auta
+    b.heading = Math.atan2(b.px - player.x, b.pz - player.z);
+    b.tx = Math.max(-420, Math.min(420, b.px + Math.sin(b.heading) * 90));
+    b.tz = Math.max(-420, Math.min(420, b.pz + Math.cos(b.heading) * 90));
+    if (chirpCd <= 0) { sndChirp(); chirpCd = 0.5; }
+  }
+  b.t = 5 + Math.random() * 12;
+}
+function updateBird(b, dt) {
+  b.t -= dt;
+  const dx = b.tx - b.px, dz = b.tz - b.pz;
+  const dist = Math.hypot(dx, dz);
+  if (b.state === 'fly') {
+    b.heading = angLerp(b.heading, Math.atan2(dx, dz), Math.min(1, dt * 1.4));
+    b.speed += (8 - b.speed) * Math.min(1, dt);
+    b.alt += (b.talt - b.alt) * Math.min(1, dt * 0.7);
+    if (dist < 14) pickSkyTarget(b);
+    if (b.t <= 0) {
+      const s = BIRD_LAND_SPOTS[(Math.random() * BIRD_LAND_SPOTS.length) | 0];
+      b.tx = s[0] + Math.random() * 4 - 2;
+      b.tz = s[1] + Math.random() * 4 - 2;
+      b.state = 'land';
+    }
+  } else if (b.state === 'land') {
+    b.heading = angLerp(b.heading, Math.atan2(dx, dz), Math.min(1, dt * 2.2));
+    b.speed += ((dist > 20 ? 7 : 2.5) - b.speed) * Math.min(1, dt * 1.5);
+    b.alt += ((dist > 18 ? 5 : 0.1) - b.alt) * Math.min(1, dt * (dist > 18 ? 0.8 : 1.8));
+    if (dist < 2 && b.alt < 0.7) {
+      b.state = 'sit';
+      b.speed = 0;
+      b.alt = 0.1;
+      b.t = 6 + Math.random() * 14;
+    }
+  } else if (b.state === 'sit') {
+    b.speed = 0;
+    if (b.t <= 0) birdTakeoff(b, false);
+  } else { // takeoff
+    b.heading = angLerp(b.heading, Math.atan2(dx, dz), Math.min(1, dt * 1.6));
+    b.speed += (9 - b.speed) * Math.min(1, dt * 1.4);
+    b.alt += (b.talt - b.alt) * Math.min(1, dt * 1.1);
+    if (b.alt > b.talt * 0.6) b.state = 'fly';
+  }
+  // auto se približava → bijeg
+  if (b.state === 'sit' || b.state === 'land') {
+    const pdx = player.x - b.px, pdz = player.z - b.pz;
+    if (pdx * pdx + pdz * pdz < 170) birdTakeoff(b, true);
+  }
+  const step = b.speed * dt;
+  b.px += Math.sin(b.heading) * step;
+  b.pz += Math.cos(b.heading) * step;
+  b.g.position.set(b.px, 0.12 + b.alt, b.pz);
+  b.g.rotation.y = b.heading;
+  if (b.state === 'sit') {
+    // krila sklopljena + kljucanje
+    b.wingL.rotation.z += (0.25 - b.wingL.rotation.z) * Math.min(1, dt * 8);
+    b.wingR.rotation.z += (-0.25 - b.wingR.rotation.z) * Math.min(1, dt * 8);
+    b.g.rotation.x = Math.sin(clock.elapsedTime * 3.2 + b.phase) * 0.09;
+  } else {
+    b.flap += dt * (b.state === 'fly' ? 9 : 14);
+    const w = Math.sin(b.flap) * 0.95;
+    b.wingL.rotation.z = w;
+    b.wingR.rotation.z = -w;
+    b.g.rotation.x = 0;
+  }
+}
+
 // ---------------------------------------------------------------- zvjezdice za skupljanje
 const stars = [];
 let starCount = 0;
@@ -989,6 +1118,12 @@ function sndPoliceBlip() {
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
   o.connect(g); g.connect(master);
   o.start(t); o.stop(t + 0.45);
+}
+
+function sndChirp() {
+  beep(2300, 0.07, 'sine', 0.05, 0);
+  beep(2700, 0.09, 'sine', 0.05, 0.09);
+  beep(2100, 0.07, 'sine', 0.04, 0.2);
 }
 
 // ---------------------------------------------------------------- ulazi (touch + tipkovnica, multi-touch)
@@ -1263,6 +1398,9 @@ function animate() {
     brokenCar.group.rotation.y = towNpc.heading;
   }
   updatePauk(dt);
+  // ptice
+  chirpCd -= dt;
+  for (const b of birds) updateBird(b, dt);
   // brodić plovi ispod mosta
   boat.position.x += 5 * dt;
   if (boat.position.x > 480) boat.position.x = -480;
